@@ -1,8 +1,11 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,9 +45,13 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	defer fileData.Close()
-	mType := headerData.Header.Get("Content-Type")
-	if mType == "" {
-		respondWithError(w, http.StatusBadRequest, "Missing Content-Type for thumbnail", nil)
+	mType, _, err := mime.ParseMediaType(headerData.Header.Get("Content-Type"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Missing Content-Type", nil)
+		return
+	}
+	if mType != "image/jpeg" && mType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Invalid file format, must be jpeg or png", nil)
 		return
 	}
 
@@ -57,8 +64,11 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	splitType := strings.Split(mType, "/")
-	vidWithExt := videoID.String() + "." + splitType[1]
+	rawName := make([]byte, 32)
+	rand.Read(rawName)
+	fileName := base64.RawURLEncoding.EncodeToString(rawName)
+	fileTypeSplit := strings.Split(mType, "/")
+	vidWithExt := fileName + "." + fileTypeSplit[1]
 	fPath := filepath.Join(cfg.assetsRoot, vidWithExt)
 	thumbFile, err := os.Create(fPath)
 	if err != nil {
